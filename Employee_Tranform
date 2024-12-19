@@ -1,0 +1,113 @@
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import java.io.{BufferedWriter, File, FileWriter}
+// Loaded a csv file and perform the operations
+object EmployeeProject {
+
+  def main(args:Array[String]): Unit = {
+    // Initalize a spark session
+    var spark = SparkSession.builder().appName("Employee Project Analytics")
+      .master("local[*]").getOrCreate()
+
+    // reading the csv file
+    def loadEmployeedf(spark: SparkSession, path: String): DataFrame = {
+
+      spark.read.option("header", value = true)
+        .option("inferSchema", value = true)
+        .csv(path)
+    }
+
+    //perform the transformations only active filter
+    def activeEmployee(df:DataFrame):DataFrame={
+      df.filter(col("Status")==="Active")
+    }
+
+    /// calculate avg salary by department
+    def avgSalarByDepartment(df:DataFrame):DataFrame={
+      df.groupBy("Department").agg(avg("Salary").as("AvgSalary")).orderBy(desc("AvgSalary"))
+    }
+
+    //Filter employees with a performance score above a certain threshold.
+    def employeeScore(df:DataFrame):DataFrame={
+      df.filter(col("Performance Score")>3)
+    }
+
+    //Add a column for years since joining the company.
+
+    def yearSinceJoinComp(df:DataFrame):DataFrame={
+      df.withColumn("YearSinceJoinCompany",year(current_date())-year(to_date(col("Joining Date"),"yyyy-MM-dd")))
+    }
+
+    // employees salary is greter than 3000, experience > 3 years and , department =Sales
+
+    def employeeExpSalary(df:DataFrame):DataFrame={
+      df.filter(col("Salary")>3000 and(col("Experience")>3) and(col("Department")==="Sales"))
+
+    }
+    ////--------saved the data in seperate csv file for each transformation
+
+//    def saveDataFrame(df:DataFrame, path:String):Unit={
+//      //df.write.option("header",true).mode("overwrite").csv(path)
+//
+//
+//    }
+    def saveDataFrameToCSV(df: DataFrame, filePath: String): Unit = {
+      // Collect data from the DataFrame (to the driver)
+      val rows = df.collect()
+
+      // Get column names
+      val header = df.columns.mkString(",")
+
+      // Prepare the file
+      val file = new File(filePath)
+      val bw = new BufferedWriter(new FileWriter(file))
+
+      try {
+        // Write the header
+        bw.write(header)
+        bw.newLine()
+
+        // Write each row
+        rows.foreach { row =>
+          val rowString = row.toSeq.map {
+              case null => ""  // Replace null values with an empty string
+              case value => value.toString
+            }.mkString(",")
+          bw.write(rowString)
+          bw.newLine()
+        }
+      } finally {
+        bw.close() // Close the writer
+      }
+    }
+    
+    var employee_df = loadEmployeedf(spark, "data2/emp_datasheet.csv")
+    //employee_df.printSchema()
+    //employee_df.show()
+
+    // show filter data only
+    var active_employeedf= activeEmployee(employee_df)
+    //active_employeedf.show()
+    //print("888888888888888*888888888888888888888888888******************")
+   // print("only active employees count---------------",active_employeedf.count())
+
+    //show avg salary by department
+    var avgSalaryDf=avgSalarByDepartment(employee_df)
+    //avgSalaryDf.show()
+
+    // performence score greter than 3
+    var employee_scoreDf=employeeScore(employee_df)
+      //employee_scoreDf.show()
+
+    // year since joind the company
+    var yearSinceJoinCompany=yearSinceJoinComp(employee_df)
+      //yearSinceJoinCompany.show()
+
+    // employee salary growth
+    var employee_details_salary=employeeExpSalary(employee_df)
+    //employee_details_salary.show()
+
+    saveDataFrameToCSV(active_employeedf,"data2/active_emp.csv")
+  }
+  
+}
